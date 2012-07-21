@@ -1,0 +1,23 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=4142
+
+FileFastSelector plugin tries to provide fast way to open files using minimal number of keystrokes. It's inspired by Command-T plugin but requires python support instead of ruby.
+
+Files are selected by typing characters that appear in their paths, and are ordered by length of common substring with search string.
+
+Root directory for search is current vim directory. Or if tags file exists somewhere in parent directories its path will be used as root.
+
+Source code is also available on bitbucket: https://bitbucket.org/madevgeny/fastfileselector.
+
+NOTE: FileFastSelector requires a version of VIM with Python support enabled.
+
+Usage:
+Command :FFS toggles visibility of fast file selector buffer.
+Parameter g:FFS_window_height sets height of search buffer. Default = 15.
+Parameter g:FFS_ignore_list sets list of dirs/files to ignore use Unix shell-style wildcards. Default = ['.*', '*.bak', '~*', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.so', '*.pyc'].
+Parameter g:FFS_ignore_case, if set letters case will be ignored during search. On windows default = 1, on unix default = 0.
+Parameter g:FFS_history_size sets the maximum number of stored search queries in history. Default = 10.
+
+To get queries history press <Ctrl-H> in insert or normal mode in
+search string. Autocompletion using history also works by
+<Ctrl-X><Ctrl-U>.
+
