@@ -47,7 +47,11 @@
 "
 " Version:		0.1.0
 "
-" ChangeLog:	0.1.0:	 Initial version.
+" ChangeLog:	0.2.0: Added support of GetLatestVimScripts.
+"
+"				0.1.0:	 Initial version.
+"
+" GetLatestVimScripts: 4142 18299 :AutoInstall: fastfileselector.vim
 "====================================================================================
 
 if exists( "g:loaded_FAST_FILE_SELECTOR" )
