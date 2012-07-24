@@ -45,11 +45,13 @@
 " 				search string. Autocompletion using history also works by
 " 				<Ctrl-X><Ctrl-U>.
 "
-" Version:		0.1.0
+" Version:		0.2.1
 "
-" ChangeLog:	0.2.0: Added support of GetLatestVimScripts.
+" ChangeLog:	0.2.1: Bug fixes and optimization of search.
 "
-"				0.1.0:	 Initial version.
+" 				0.2.0: Added support of GetLatestVimScripts.
+"
+"				0.1.0: Initial version.
 "
 " GetLatestVimScripts: 4142 18299 :AutoInstall: fastfileselector.vim
 "====================================================================================
@@ -172,7 +174,7 @@ def scan_dir(path, ignoreList):
 
 	fileList = []
 	for root, dirs, files in walk(path):
-		fileList += [join(root, f) for f in filter(lambda x: not in_ignore_list(x), files)]
+		fileList += [join(root, f) for f in files if not in_ignore_list(f)]
 
 		toRemove = filter(in_ignore_list, dirs)
 		for j in toRemove:
@@ -247,46 +249,31 @@ import operator
 def longest_substring_size(str1, str2):
 	n1 = len(str1)
 	n2 = len(str2)
+	n2inc = n2 + 1
 
-	L = [0 for i in range((n1 + 1) * (n2 + 1))]
+	L = [0 for i in range((n1 + 1) * n2inc)]
 
 	res = 0
 	for i in range(n1):
 		for j in range(n2):
 			if str1[i] == str2[j]:
-				ind = (i + 1) * n2 + (j + 1)
-				L[ind] = L[i * n2 + j] + 1
+				ind = (i + 1) * n2inc + (j + 1)
+				L[ind] = L[i * n2inc + j] + 1
 				if L[ind] > res:
 					res = L[ind]
+
 	return res
 
 def check_symbols_uni(s, symbols):
-	res = 0
-	prevSymbol = None
-	prevSymbolPos = -1
+	prevPos = 0
 	for i in symbols:
-		pos = s.find(i)
+		pos = s.find(i, prevPos)
 		if pos == -1:
 			return 0
 		else:
-			if prevSymbol != None:
-				if pos < prevSymbolPos:
-					pos = s.find(i, pos + 1)
-					if pos == -1:
-						return 0
-					else:
-						res -= 1
-				else:
-					res -= 1
+			prevPos = pos + 1
 
-			prevSymbol = i
-			prevSymbolPos = pos
-
-	res -= 1
-
-	res -= (longest_substring_size(s, symbols) - 1) * 2
-
-	return res
+	return -longest_substring_size(s, symbols)
 
 def check_symbols_1(s, symbols):
 	if s.find(symbols[0]) == -1:
@@ -350,7 +337,7 @@ if len(symbols) != 0:
 		check_symbols = check_symbols_uni
 
 	fileList = map(lambda x: (check_symbols(x[0], symbols), x), vim.eval(fileListVar))
-	fileList = filter(lambda x: x[0] != 0, fileList)
+	fileList = filter(operator.itemgetter(0), fileList)
 	fileList.sort(key=operator.itemgetter(0, 1))
 
 	vim.command("let s:filtered_file_list=[]")
@@ -436,7 +423,6 @@ fun! CompleteFFSHistory(findstart, base)
 		return res
 	endif
 endfun
-
 
 fun! <SID>ToggleFastFileSelectorBuffer()
 	if !exists("s:tm_winnr") || s:tm_winnr==-1
