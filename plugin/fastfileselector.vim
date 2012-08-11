@@ -45,13 +45,19 @@
 " 				search string. Autocompletion using history also works by
 " 				<Ctrl-X><Ctrl-U>.
 "
-" Version:		0.2.1
+" Version:		0.2.2
 "
-" ChangeLog:	0.2.1: Bug fixes and optimization of search.
+" ChangeLog:	0.2.2:	Fixed autocompletion by <Ctrl-X><Ctrl-U>.
+" 						Fixed immediate opening of first file after closing
+"						history menu.
+"						Removed '\' and '/' from color highlighting as they
+"						may produce errors.
 "
-" 				0.2.0: Added support of GetLatestVimScripts.
+" 				0.2.1:	Bug fixes and optimization of search.
 "
-"				0.1.0: Initial version.
+" 				0.2.0:	Added support of GetLatestVimScripts.
+"
+"				0.1.0:	Initial version.
 "
 " GetLatestVimScripts: 4142 18299 :AutoInstall: fastfileselector.vim
 "====================================================================================
@@ -86,7 +92,7 @@ if !exists("g:FFS_ignore_case")
 endif
 
 if !exists("g:FFS_ignore_list")
-	let g:FFS_ignore_list = ['.*', '*.bak', '~*', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.so', '*.pyc']
+	let g:FFS_ignore_list = ['.*', '*.bak', '~*', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.suo', '*.sdf', '*.exp', '*.so', '*.pyc']
 endif
 
 if !exists("s:file_list")
@@ -124,10 +130,15 @@ fun <SID>UpdateSyntax(str)
 	
 	exe 'syn match FFS_base_path #^.\{'.s:base_path_length.'\}# nextgroup=Identifier'
 	if a:str != ''
-		if g:FFS_ignore_case == 0
-			exe 'syn match FFS_matches #['.a:str.']#'
+		let str = substitute(a:str, "[\\/]", "", "g")
+		if str != ''
+			if g:FFS_ignore_case == 0
+				exe 'syn match FFS_matches #['.str.']#'
+			else
+				exe 'syn match FFS_matches #['.tolower(str).toupper(str).']#'
+			endif
 		else
-			exe 'syn match FFS_matches #['.tolower(a:str).toupper(a:str).']#'
+			exe 'hi clear FFS_matches'
 		endif
 	else
 		exe 'hi clear FFS_matches'
@@ -180,9 +191,8 @@ def scan_dir(path, ignoreList):
 		for j in toRemove:
 			dirs.remove(j)
 
-	n = len(path.encode("utf-8"))
-	fileList = map(lambda x: x.encode("utf-8"), fileList)
-	fileList = map(lambda x: (caseMod(x[n:]), x), fileList)
+	n = len(path)
+	fileList = [(caseMod(x[n:].encode("utf-8")), x.encode("utf-8")) for x in fileList]
 
 	return fileList
 
@@ -216,31 +226,41 @@ fun <SID>OnRefresh()
 	cal append(1, fl)
 	exe 'normal! i'
 
-	autocmd CursorMovedI <buffer> call <SID>OnCursorMovedI()
+	autocmd CursorMovedI <buffer> call <SID>OnCursorMoved(1, 0)
 endfun
 
-fun <SID>OnCursorMoved()
-	let l = getpos(".")[1]
-	if l > 1
-		setlocal cul
-		setlocal noma
+fun! CompleteFFSHistory(findstart, base)
+ 	if a:findstart
+		return 0
 	else
-		setlocal nocul
-		setlocal ma
+		let res = []
+		for m in s:ffs_history
+		  if m =~ '^' . a:base
+			call add(res, m)
+		  endif
+		endfor
+		return res
 	endif
 endfun
 
-fun <SID>OnCursorMovedI()
-	let l = getpos(".")[1]
-	if l > 1
+fun <SID>OnCursorMoved(ins_mode, force_update)
+	if line('.') > 1
 		setlocal cul
 		setlocal noma
+
+		setlocal completefunc=''
 	else
 		setlocal nocul
 		setlocal ma
 
+		setlocal completefunc=CompleteFFSHistory
+
+		if a:ins_mode == 0
+			return
+		endif
+		
 		let str=getline('.')
-		if s:user_line!=str
+		if s:user_line!=str || a:force_update
 			let save_cursor = winsaveview()
 python << EOF
 import vim
@@ -371,7 +391,6 @@ fun <SID>GotoFile()
 		call insert(s:ffs_history,s:user_line)
 	endif
 
-
 	exe ':wincmd p'
 	exe ':'.s:tm_winnr.'bd!'
 	let s:tm_winnr=-1
@@ -410,25 +429,11 @@ fun! <SID>ShowHistory()
 	return ''
 endfun
 
-fun! CompleteFFSHistory(findstart, base)
- 	if a:findstart
-		return 0
-	else
-		let res = []
-		for m in s:ffs_history
-		  if m =~ '^' . a:base
-			call add(res, m)
-		  endif
-		endfor
-		return res
-	endif
-endfun
-
 fun! <SID>ToggleFastFileSelectorBuffer()
 	if !exists("s:tm_winnr") || s:tm_winnr==-1
 		exe "bo".g:FFS_window_height."sp FastFileSelector"
 
-		exe "inoremap <expr> <buffer> <Enter> pumvisible() ? '<CR><C-O>:cal <SID>GotoFile()<CR>' : '<C-O>:cal <SID>GotoFile()<CR>'"
+		exe "inoremap <expr> <buffer> <Enter> pumvisible() ? '<CR><Up><End><C-O>:call <SID>OnCursorMoved(1, 1)<CR>' : '<C-O>:cal <SID>GotoFile()<CR>'"
 		exe "noremap <silent> <buffer> <Enter> :cal <SID>GotoFile()<CR>"
 		exe "inoremap <silent> <buffer> <C-H> <C-R>=<SID>ShowHistory()<CR>"
 		exe "noremap <silent> <buffer> <C-H> I<C-R>=<SID>ShowHistory()<CR>"		
@@ -445,8 +450,8 @@ fun! <SID>ToggleFastFileSelectorBuffer()
 
 			autocmd BufUnload <buffer> exe 'let s:tm_winnr=-1'
 			autocmd BufLeave <buffer> call <SID>OnBufLeave()
-			autocmd CursorMoved <buffer> call <SID>OnCursorMoved()
-			autocmd CursorMovedI <buffer> call <SID>OnCursorMovedI()
+			autocmd CursorMoved <buffer> call <SID>OnCursorMoved(0, 0)
+			autocmd CursorMovedI <buffer> call <SID>OnCursorMoved(1, 0)
 			autocmd VimResized <buffer> call <SID>OnRefresh()
 			autocmd BufEnter <buffer> call <SID>OnBufEnter()
 		endif
