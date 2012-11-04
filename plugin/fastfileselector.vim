@@ -36,7 +36,7 @@
 "
 " Usage:		Command :FFS toggles visibility of fast file selector buffer.
 " 				Parameter g:FFS_window_height sets height of search buffer. Default = 15.
-" 				Parameter g:FFS_ignore_list sets list of dirs/files to ignore use Unix shell-style wildcards. Default = ['.*', '*.bak', '~*', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.so', '*.pyc'].
+" 				Parameter g:FFS_ignore_list sets list of dirs/files to ignore use Unix shell-style wildcards. Default = ['.*', '*.bak', '~*', '*~', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.so', '*.pyc', 'CMakeFiles'].
 "				Parameter g:FFS_ignore_case, if set letters case will be ignored during search. On windows default = 1, on unix default = 0.
 "				Parameter g:FFS_history_size sets the maximum number of
 " 				stored search queries in history. Default = 10.
@@ -45,9 +45,13 @@
 " 				search string. Autocompletion using history also works by
 " 				<Ctrl-X><Ctrl-U>.
 "
-" Version:		0.2.2
+" Version:		0.2.3
 "
-" ChangeLog:	0.2.2:	Fixed autocompletion by <Ctrl-X><Ctrl-U>.
+" ChangeLog:	0.2.3:	Fixed opening files with spaces in path.
+"						Fixed case sensitive search.
+"						Removed fastfileselector buffer from buffers list.
+"
+"				0.2.2:	Fixed autocompletion by <Ctrl-X><Ctrl-U>.
 " 						Fixed immediate opening of first file after closing
 "						history menu.
 "						Removed '\' and '/' from color highlighting as they
@@ -92,7 +96,7 @@ if !exists("g:FFS_ignore_case")
 endif
 
 if !exists("g:FFS_ignore_list")
-	let g:FFS_ignore_list = ['.*', '*.bak', '~*', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.suo', '*.sdf', '*.exp', '*.so', '*.pyc']
+	let g:FFS_ignore_list = ['.*', '*.bak', '~*', '*~', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.suo', '*.sdf', '*.exp', '*.so', '*.pyc', 'CMakeFiles']
 endif
 
 if !exists("s:file_list")
@@ -154,7 +158,7 @@ from fnmatch import fnmatch
 
 import vim
 
-if vim.eval("g:FFS_ignore_case"):
+if int(vim.eval("g:FFS_ignore_case")):
 	import string
 	caseMod = string.lower
 else:
@@ -185,7 +189,7 @@ def scan_dir(path, ignoreList):
 
 	fileList = []
 	for root, dirs, files in walk(path):
-		fileList += [join(root, f) for f in files if not in_ignore_list(f)]
+		fileList.extend([join(root, f) for f in files if not in_ignore_list(f)])
 
 		toRemove = filter(in_ignore_list, dirs)
 		for j in toRemove:
@@ -332,7 +336,7 @@ def check_symbols_3(s, symbols):
 
 	return -1
 
-if vim.eval("g:FFS_ignore_case"):
+if int(vim.eval("g:FFS_ignore_case")):
 	import string
 	caseMod = string.lower
 else:
@@ -394,7 +398,7 @@ fun <SID>GotoFile()
 	exe ':wincmd p'
 	exe ':'.s:tm_winnr.'bd!'
 	let s:tm_winnr=-1
-	exe ':e '.str
+	exe ':e '.substitute(str, " ", "\\\\ ", "g")
 endfun
 
 fun <SID>OnBufLeave()
@@ -441,6 +445,8 @@ fun! <SID>ToggleFastFileSelectorBuffer()
 		let s:tm_winnr=bufnr("FastFileSelector")
 		
 		setlocal buftype=nofile
+		setlocal bufhidden=wipe
+		setlocal nobuflisted		
 		setlocal noswapfile
 		setlocal nonumber
 
