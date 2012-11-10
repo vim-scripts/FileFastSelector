@@ -40,14 +40,19 @@
 "				Parameter g:FFS_ignore_case, if set letters case will be ignored during search. On windows default = 1, on unix default = 0.
 "				Parameter g:FFS_history_size sets the maximum number of
 " 				stored search queries in history. Default = 10.
+" 				Parameter g:FFS_be_silent_on_python_lack, if set error message
+" 				on absence python support will be suppressed.
 "
 " 				To get queries history press <Ctrl-H> in insert or normal mode in
 " 				search string. Autocompletion using history also works by
 " 				<Ctrl-X><Ctrl-U>.
 "
-" Version:		0.2.3
+" Version:		0.3.0
 "
-" ChangeLog:	0.2.3:	Fixed opening files with spaces in path.
+" ChangeLog:	0.3.0:	Fixed issue with TabBar plugin.
+"						Added parameter g:FFS_be_silent_on_python_lack to suppress error message if vim doesn't have python support.
+"
+"				0.2.3:	Fixed opening files with spaces in path.
 "						Fixed case sensitive search.
 "						Removed fastfileselector buffer from buffers list.
 "
@@ -74,12 +79,14 @@ let g:loaded_FAST_FILE_SELECTOR = 1
 
 " Check to make sure the Vim version 700 or greater.
 if v:version < 700
-  echo "Sorry, FastFileSelector only runs with Vim 7.0 and greater"
+  echo "Sorry, FastFileSelector only runs with Vim 7.0 and greater."
   finish
 endif
 
 if !has('python')
-    echo "Error: Required vim compiled with +python"
+	if !exists("g:FFS_be_silent_on_python_lack") || !g:FFS_be_silent_on_python_lack
+	    echo "Error: Required vim compiled with +python, to suppress this message set variable g:FFS_be_silent_on_python_lack."
+	endif
     finish
 endif
 
@@ -395,7 +402,8 @@ fun <SID>GotoFile()
 		call insert(s:ffs_history,s:user_line)
 	endif
 
-	exe ':wincmd p'
+	call <SID>GoToPrevWindow()
+	
 	exe ':'.s:tm_winnr.'bd!'
 	let s:tm_winnr=-1
 	exe ':e '.substitute(str, " ", "\\\\ ", "g")
@@ -433,6 +441,74 @@ fun! <SID>ShowHistory()
 	return ''
 endfun
 
+" This function is taken from NERD_tree.vim
+fun <SID>FirstUsableWindow()
+	let i = 1
+	while i <= winnr("$")
+		let bnum = winbufnr(i)
+		if bnum != -1 && getbufvar(bnum, '&buftype') ==# ''
+					\ && !getwinvar(i, '&previewwindow')
+					\ && (!getbufvar(bnum, '&modified') || &hidden)
+			return i
+		endif
+
+		let i += 1
+	endwhile
+	return -1
+endfun
+
+" This function is taken from NERD_tree.vim
+fun <SID>IsWindowUsable(winnumber)
+	"gotta split if theres only one window (i.e. the NERD tree)
+	if winnr("$") ==# 1
+		return 0
+	endif
+
+	let oldwinnr = winnr()
+	exe a:winnumber . "wincmd p"
+	let specialWindow = getbufvar("%", '&buftype') != '' || getwinvar('%', '&previewwindow')
+	let modified = &modified
+	exe oldwinnr . "wincmd p"
+
+	"if its a special window e.g. quickfix or another explorer plugin then we
+	"have to split
+	if specialWindow
+		return 0
+	endif
+
+	if &hidden
+		return 1
+	endif
+
+	return !modified || <SID>BufInWindows(winbufnr(a:winnumber)) >= 2
+endfun
+
+" This function is taken from NERD_tree.vim
+fun <SID>BufInWindows(bnum)
+	let cnt = 0
+	let winnum = 1
+	while 1
+		let bufnum = winbufnr(winnum)
+		if bufnum < 0
+			break
+		endif
+		if bufnum ==# a:bnum
+			let cnt = cnt + 1
+		endif
+		let winnum = winnum + 1
+	endwhile
+
+	return cnt
+endfun
+
+" This function is taken from NERD_tree.vim
+fun <SID>GoToPrevWindow()
+	if !<SID>IsWindowUsable(winnr("#"))
+		exe <SID>FirstUsableWindow() . "wincmd w"
+	else
+		exe 'wincmd p'
+	endif
+endfun
 fun! <SID>ToggleFastFileSelectorBuffer()
 	if !exists("s:tm_winnr") || s:tm_winnr==-1
 		exe "bo".g:FFS_window_height."sp FastFileSelector"
