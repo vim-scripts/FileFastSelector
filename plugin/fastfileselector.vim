@@ -36,7 +36,7 @@
 "
 " Usage:		Command :FFS toggles visibility of fast file selector buffer.
 " 				Parameter g:FFS_window_height sets height of search buffer. Default = 15.
-" 				Parameter g:FFS_ignore_list sets list of dirs/files to ignore use Unix shell-style wildcards. Default = ['.*', '*.bak', '~*', '*~', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.so', '*.pyc', 'CMakeFiles'].
+" 				Parameter g:FFS_ignore_list sets list of dirs/files to ignore use Unix shell-style wildcards. Default = ['.*', '*.bak', '~*', '*~', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.so', '*.a', '*.pyc', 'CMakeFiles'].
 "				Parameter g:FFS_ignore_case, if set letters case will be ignored during search. On windows default = 1, on unix default = 0.
 "				Parameter g:FFS_history_size sets the maximum number of
 " 				stored search queries in history. Default = 10.
@@ -47,9 +47,12 @@
 " 				search string. Autocompletion using history also works by
 " 				<Ctrl-X><Ctrl-U>.
 "
-" Version:		0.3.0
+" Version:		0.3.1
 "
-" ChangeLog:	0.3.0:	Fixed issue with TabBar plugin.
+" ChangeLog:	0.3.1:	Removed message "press any key to continue" in some cases. Thanks to Dmitry Frank.
+"						Fixed error on closing FFS window in some cases. Thanks to Dmitry Frank.
+"
+"				0.3.0:	Fixed issue with TabBar plugin.
 "						Added parameter g:FFS_be_silent_on_python_lack to suppress error message if vim doesn't have python support.
 "
 "				0.2.3:	Fixed opening files with spaces in path.
@@ -103,7 +106,7 @@ if !exists("g:FFS_ignore_case")
 endif
 
 if !exists("g:FFS_ignore_list")
-	let g:FFS_ignore_list = ['.*', '*.bak', '~*', '*~', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.suo', '*.sdf', '*.exp', '*.so', '*.pyc', 'CMakeFiles']
+	let g:FFS_ignore_list = ['.*', '*.bak', '~*', '*~', '*.obj', '*.pdb', '*.res', '*.dll', '*.idb', '*.exe', '*.lib', '*.suo', '*.sdf', '*.exp', '*.so', '*.a', '*.pyc', 'CMakeFiles']
 endif
 
 if !exists("s:file_list")
@@ -134,7 +137,7 @@ command! -bang FFS :call <SID>ToggleFastFileSelectorBuffer()
 
 fun <SID>UpdateSyntax(str)
 	" Apply color changes
-	setlocal syntax=on
+	silent setlocal syntax=on
 
 	hi def link FFS_matches Identifier
 	hi def link FFS_base_path Comment	
@@ -527,16 +530,13 @@ fun! <SID>ToggleFastFileSelectorBuffer()
 		setlocal nonumber
 
 		let s:user_line=''
-		if !exists("s:first_time")
-			let s:first_time=1
-
-			autocmd BufUnload <buffer> exe 'let s:tm_winnr=-1'
-			autocmd BufLeave <buffer> call <SID>OnBufLeave()
-			autocmd CursorMoved <buffer> call <SID>OnCursorMoved(0, 0)
-			autocmd CursorMovedI <buffer> call <SID>OnCursorMoved(1, 0)
-			autocmd VimResized <buffer> call <SID>OnRefresh()
-			autocmd BufEnter <buffer> call <SID>OnBufEnter()
-		endif
+		
+		autocmd BufUnload <buffer> exe 'let s:tm_winnr=-1'
+		autocmd BufLeave <buffer> call <SID>OnBufLeave()
+		autocmd CursorMoved <buffer> call <SID>OnCursorMoved(0, 0)
+		autocmd CursorMovedI <buffer> call <SID>OnCursorMoved(1, 0)
+		autocmd VimResized <buffer> call <SID>OnRefresh()
+		autocmd BufEnter <buffer> call <SID>OnBufEnter()
 		
 		cal <SID>GenFileList()
 		cal <SID>OnBufEnter()
