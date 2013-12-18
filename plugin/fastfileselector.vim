@@ -47,9 +47,12 @@
 " 				search string. Autocompletion using history also works by
 " 				<Ctrl-X><Ctrl-U>.
 "
-" Version:		0.3.1
+" Version:		0.3.3
 "
-" ChangeLog:	0.3.1:	Removed message "press any key to continue" in some cases. Thanks to Dmitry Frank.
+" ChangeLog:	0.3.3:	Fixed work on some vim builds.
+"				0.3.2:	Support of vim builds with enabled python3 support.
+"
+"				0.3.1:	Removed message "press any key to continue" in some cases. Thanks to Dmitry Frank.
 "						Fixed error on closing FFS window in some cases. Thanks to Dmitry Frank.
 "
 "				0.3.0:	Fixed issue with TabBar plugin.
@@ -86,7 +89,7 @@ if v:version < 700
   finish
 endif
 
-if !has('python')
+if !has('python') && !has('python3')
 	if !exists("g:FFS_be_silent_on_python_lack") || !g:FFS_be_silent_on_python_lack
 	    echo "Error: Required vim compiled with +python, to suppress this message set variable g:FFS_be_silent_on_python_lack."
 	endif
@@ -133,6 +136,10 @@ if !exists("s:ffs_history")
 	let s:ffs_history = []
 endif
 
+if !exists("s:plugin_path")
+	let s:plugin_path = expand('<sfile>:p:h')
+endif
+
 command! -bang FFS :call <SID>ToggleFastFileSelectorBuffer()
 
 fun <SID>UpdateSyntax(str)
@@ -160,68 +167,12 @@ fun <SID>UpdateSyntax(str)
 endfun
 
 fun <SID>GenFileList()
-python << EOF
-
-from os import walk, getcwdu
-from os.path import join, isfile, abspath, split
-from fnmatch import fnmatch
-
-import vim
-
-if int(vim.eval("g:FFS_ignore_case")):
-	import string
-	caseMod = string.lower
-else:
-	caseMod = lambda x: x
-
-def find_tags(path):
-	p = abspath(path)
-
-	# need to remove last / for right splitting
-	if p[-1] == '/' or p[-1] == '\\':
-		p = path[:-1]
-	
-	while not isfile(join(p, 'tags')):
-		p, h = split(p)
-		if p == '' or h == '':
-			return None
-
-	return p
-
-def scan_dir(path, ignoreList):
-	ignoreList = map(caseMod, ignoreList)
-	def in_ignore_list(f):
-		for i in ignoreList:
-			if fnmatch(caseMod(f), i):
-				return True
-
-		return False
-
-	fileList = []
-	for root, dirs, files in walk(path):
-		fileList.extend([join(root, f) for f in files if not in_ignore_list(f)])
-
-		toRemove = filter(in_ignore_list, dirs)
-		for j in toRemove:
-			dirs.remove(j)
-
-	n = len(path)
-	fileList = [(caseMod(x[n:].encode("utf-8")), x.encode("utf-8")) for x in fileList]
-
-	return fileList
-
-wd = getcwdu()
-path = find_tags(wd)
-if path == None:
-	path = wd
-	
-fileList = scan_dir(path, vim.eval("g:FFS_ignore_list"))
-
-vim.command('let s:base_path_length=%d' % len(path.encode("utf-8")))
-vim.command("let s:file_list=[]")
-for i in fileList:
-	vim.command('let s:file_list+=[["%s","%s"]]' % (i[0].replace('\\', '\\\\'), i[1].replace('\\', '\\\\')))
-EOF
+	let py_file = s:plugin_path.'/fastfileselector/gen_file_list.py'
+	if has('python')
+		exe ':pyfile '.py_file
+	else
+		exe ':py3file '.py_file
+	endif
 	let s:filtered_file_list = s:file_list
 	call <SID>UpdateSyntax('')
 endfun
@@ -276,110 +227,15 @@ fun <SID>OnCursorMoved(ins_mode, force_update)
 		let str=getline('.')
 		if s:user_line!=str || a:force_update
 			let save_cursor = winsaveview()
-python << EOF
-import vim
-import operator
 
-def longest_substring_size(str1, str2):
-	n1 = len(str1)
-	n2 = len(str2)
-	n2inc = n2 + 1
-
-	L = [0 for i in range((n1 + 1) * n2inc)]
-
-	res = 0
-	for i in range(n1):
-		for j in range(n2):
-			if str1[i] == str2[j]:
-				ind = (i + 1) * n2inc + (j + 1)
-				L[ind] = L[i * n2inc + j] + 1
-				if L[ind] > res:
-					res = L[ind]
-
-	return res
-
-def check_symbols_uni(s, symbols):
-	prevPos = 0
-	for i in symbols:
-		pos = s.find(i, prevPos)
-		if pos == -1:
-			return 0
-		else:
-			prevPos = pos + 1
-
-	return -longest_substring_size(s, symbols)
-
-def check_symbols_1(s, symbols):
-	if s.find(symbols[0]) == -1:
-		return 0
-	return -1
-
-def check_symbols_2(s, symbols):
-	pos = s.find(symbols[0])
-	if pos == -1:
-		return 0
-
-	if s.rfind(symbols[1]) < pos:
-		return 0
-
-	if s.find(symbols) != -1:
-		return -2
-
-	return -1
-
-def check_symbols_3(s, symbols):
-	p1 = s.find(symbols[0])
-	if p1 == -1:
-		return 0
-
-	p2 = s.rfind(symbols[2])
-	if p2 < p1:
-		return 0
-
-	if s[p1 : p2 + 1].find(symbols[1]) == -1:
-		return 0
-
-	if s.find(symbols) != -1:
-		return -3
-	if s.find(symbols[:2]) != -1 or s.find(symbols[1:]) != -1:
-		return -2
-
-	return -1
-
-if int(vim.eval("g:FFS_ignore_case")):
-	import string
-	caseMod = string.lower
-else:
-	caseMod = lambda x: x
-
-symbols = caseMod(vim.eval('str'))
-oldSymbols = caseMod(vim.eval('s:user_line'))
-if symbols.find(oldSymbols) != -1:
-	fileListVar = 's:filtered_file_list'
-else:
-	fileListVar = 's:file_list'
-
-if len(symbols) != 0:
-	nSymbols = len(symbols)
-	if nSymbols == 1:
-		check_symbols = check_symbols_1
-	elif nSymbols == 2:
-		check_symbols = check_symbols_2
-	elif nSymbols == 3:
-		check_symbols = check_symbols_2
-	else:
-		check_symbols = check_symbols_uni
-
-	fileList = map(lambda x: (check_symbols(x[0], symbols), x), vim.eval(fileListVar))
-	fileList = filter(operator.itemgetter(0), fileList)
-	fileList.sort(key=operator.itemgetter(0, 1))
-
-	vim.command("let s:filtered_file_list=[]")
-	for i in fileList:
-		vim.command('let s:filtered_file_list+=[["%s","%s"]]' % (i[1][0].replace('\\', '\\\\'), i[1][1].replace('\\', '\\\\')))
-else:
-	vim.command("let s:filtered_file_list = s:file_list")
-EOF
+			let py_file = s:plugin_path.'/fastfileselector/on_cursor_moved.py'
+			
+			if has('python')
+				exe ':pyfile '.py_file
+			else
+				exe ':py3file '.py_file
+			endif
+			
 			let s:user_line=str
 			call <SID>OnRefresh()
 			cal winrestview(save_cursor)
@@ -537,7 +393,7 @@ fun! <SID>ToggleFastFileSelectorBuffer()
 		autocmd CursorMovedI <buffer> call <SID>OnCursorMoved(1, 0)
 		autocmd VimResized <buffer> call <SID>OnRefresh()
 		autocmd BufEnter <buffer> call <SID>OnBufEnter()
-		
+	
 		cal <SID>GenFileList()
 		cal <SID>OnBufEnter()
 	else
